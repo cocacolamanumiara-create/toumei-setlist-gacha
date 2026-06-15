@@ -257,7 +257,7 @@
 
   <section class="panel" id="previewPanel" style="display:none;margin-top:18px;">
     <h2>試聴</h2>
-    <p class="small">曲名の横の「試聴」を押すと、Apple Music / iTunesのプレビュー音源を検索して再生します。iPhoneで音が鳴らない場合は、表示される「この曲を再生」またはプレイヤーの再生ボタンを押してください。</p>
+    <p class="small">曲名の横の「試聴」を押すと、Apple Music / iTunesのプレビュー音源を検索して再生します。iPhoneで音が鳴らない場合は「この曲を再生」またはプレイヤーの再生ボタンを押してください。見つからない曲は「検索」からApple Musicへ移動できます。</p>
     <audio id="audioPlayer" controls playsinline preload="auto" style="width:100%;margin-top:8px;"></audio>
     <div id="nowPlaying" class="small" style="margin-top:8px;"></div>
     <button id="manualPlayButton" class="secondary" onclick="manualPlayPreview()" style="display:none;margin-top:10px;">この曲を再生</button>
@@ -498,14 +498,42 @@ function escapeJs(str){
 
 const previewCache = new Map();
 
+function itunesSearchJsonp(searchTitle){
+  return new Promise((resolve, reject) => {
+    const callbackName = "itunesCallback_" + Date.now() + "_" + Math.floor(Math.random() * 100000);
+    const script = document.createElement("script");
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error("timeout"));
+    }, 8000);
+
+    function cleanup(){
+      clearTimeout(timeout);
+      if (script.parentNode) script.parentNode.removeChild(script);
+      try { delete window[callbackName]; } catch(e) { window[callbackName] = undefined; }
+    }
+
+    window[callbackName] = (data) => {
+      cleanup();
+      resolve(data);
+    };
+
+    script.onerror = () => {
+      cleanup();
+      reject(new Error("jsonp error"));
+    };
+
+    script.src = `https://itunes.apple.com/search?term=${encodeURIComponent(searchTitle + " サカナクション")}&country=JP&media=music&entity=song&limit=10&callback=${callbackName}`;
+    document.body.appendChild(script);
+  });
+}
+
 async function findPreviewItem(song){
   const searchTitle = stripVersionForSearch(song);
   const cacheKey = searchTitle;
   if (previewCache.has(cacheKey)) return previewCache.get(cacheKey);
 
-  const url = `https://itunes.apple.com/search?term=${encodeURIComponent(searchTitle + " サカナクション")}&country=JP&media=music&entity=song&limit=8`;
-  const res = await fetch(url);
-  const data = await res.json();
+  const data = await itunesSearchJsonp(searchTitle);
   const results = (data.results || []).filter(item => {
     const artist = (item.artistName || "").toLowerCase();
     return artist.includes("sakanaction") || item.artistName === "サカナクション";
@@ -584,11 +612,11 @@ async function previewSong(event, song){
       }
     } else {
       now.innerHTML = `試聴音源が見つかりませんでした。<a href="${appleMusicSearchUrl(song)}" target="_blank" rel="noopener" style="color:var(--accent);">Apple Musicで検索</a>`;
-      if (button) button.textContent = "検索";
+      if (button) button.textContent = "試聴";
     }
   } catch (err) {
-    now.innerHTML = `試聴検索でエラーが出ました。<a href="${appleMusicSearchUrl(song)}" target="_blank" rel="noopener" style="color:var(--accent);">Apple Musicで検索</a>`;
-    if (button) button.textContent = "検索";
+    now.innerHTML = `試聴検索に失敗しました。通信環境やSafariの制限で取得できない場合があります。<a href="${appleMusicSearchUrl(song)}" target="_blank" rel="noopener" style="color:var(--accent);">Apple Musicで検索</a>`;
+    if (button) button.textContent = "試聴";
   }
 }
 

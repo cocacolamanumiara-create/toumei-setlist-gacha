@@ -257,9 +257,10 @@
 
   <section class="panel" id="previewPanel" style="display:none;margin-top:18px;">
     <h2>試聴</h2>
-    <p class="small">曲名の横の「試聴」を押すと、Apple Music / iTunesのプレビュー音源を検索して再生します。見つからない場合はApple Music検索へ移動できます。</p>
-    <audio id="audioPlayer" controls style="width:100%;margin-top:8px;"></audio>
+    <p class="small">曲名の横の「試聴」を押すと、Apple Music / iTunesのプレビュー音源を検索して再生します。iPhoneで音が鳴らない場合は、表示される「この曲を再生」またはプレイヤーの再生ボタンを押してください。</p>
+    <audio id="audioPlayer" controls playsinline preload="auto" style="width:100%;margin-top:8px;"></audio>
     <div id="nowPlaying" class="small" style="margin-top:8px;"></div>
+    <button id="manualPlayButton" class="secondary" onclick="manualPlayPreview()" style="display:none;margin-top:10px;">この曲を再生</button>
   </section>
 
   <section class="panel" id="editor" style="display:none;margin-top:18px;">
@@ -458,6 +459,7 @@ async function generateSetlist() {
   document.getElementById("setlistTitle").textContent = `${getDisplayName()}本編 20曲`;
   render("mainList", picked.slice(0, 20), 1);
   render("encoreList", picked.slice(20), 1);
+  preloadPreviewUrls(picked);
 }
 
 function stripVersionForSearch(song){
@@ -493,6 +495,49 @@ function escapeJs(str){
   return String(str).replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/\n/g, "\\n").replace(/\r/g, "");
 }
 
+
+const previewCache = new Map();
+
+async function findPreviewItem(song){
+  const searchTitle = stripVersionForSearch(song);
+  const cacheKey = searchTitle;
+  if (previewCache.has(cacheKey)) return previewCache.get(cacheKey);
+
+  const url = `https://itunes.apple.com/search?term=${encodeURIComponent(searchTitle + " サカナクション")}&country=JP&media=music&entity=song&limit=8`;
+  const res = await fetch(url);
+  const data = await res.json();
+  const results = (data.results || []).filter(item => {
+    const artist = (item.artistName || "").toLowerCase();
+    return artist.includes("sakanaction") || item.artistName === "サカナクション";
+  });
+
+  const lowered = searchTitle.toLowerCase();
+  const item = results.find(r => (r.trackName || "").toLowerCase().includes(lowered)) || results[0] || null;
+  previewCache.set(cacheKey, item);
+  return item;
+}
+
+async function preloadPreviewUrls(list){
+  // iPhoneでは「試聴」タップ後に検索を挟むと自動再生が止まりやすいので、表示後に裏で先読みしておく
+  const targets = list.slice(0, 23);
+  for (const song of targets) {
+    findPreviewItem(song).catch(()=>{});
+  }
+}
+
+async function manualPlayPreview(){
+  const audio = document.getElementById("audioPlayer");
+  const btn = document.getElementById("manualPlayButton");
+  if (!audio.src) return;
+  try {
+    await audio.play();
+    btn.style.display = "none";
+  } catch(e) {
+    btn.textContent = "再生できない場合は、上のプレイヤーの再生ボタンを押してください";
+    btn.style.display = "inline-block";
+  }
+}
+
 async function previewSong(event, song){
   if (event) event.stopPropagation();
 
@@ -501,53 +546,53 @@ async function previewSong(event, song){
     b.classList.remove("playing");
     if (b.tagName === "BUTTON") b.textContent = "試聴";
   });
-  if (button) {
-    button.classList.add("playing");
-    button.textContent = "検索中";
-  }
 
   const panel = document.getElementById("previewPanel");
   const audio = document.getElementById("audioPlayer");
   const now = document.getElementById("nowPlaying");
-  panel.style.display = "block";
-  now.textContent = `「${song}」を検索中...`;
+  const manual = document.getElementById("manualPlayButton");
 
-  const searchTitle = stripVersionForSearch(song);
-  const url = `https://itunes.apple.com/search?term=${encodeURIComponent(searchTitle + " サカナクション")}&country=JP&media=music&entity=song&limit=8`;
+  panel.style.display = "block";
+  manual.style.display = "none";
+  now.textContent = `「${song}」を準備中...`;
+
+  if (button) {
+    button.classList.add("playing");
+    button.textContent = "準備中";
+  }
 
   try {
-    const res = await fetch(url);
-    const data = await res.json();
-    const results = (data.results || []).filter(item => {
-      const artist = (item.artistName || "").toLowerCase();
-      return artist.includes("sakanaction") || item.artistName === "サカナクション";
-    });
-
-    const lowered = searchTitle.toLowerCase();
-    let item = results.find(r => (r.trackName || "").toLowerCase().includes(lowered)) || results[0];
+    const item = await findPreviewItem(song);
 
     if (item && item.previewUrl) {
       audio.src = item.previewUrl;
-      await audio.play();
-      now.innerHTML = `再生中：${escapeHtml(item.trackName)} / ${escapeHtml(item.artistName)}　<a href="${item.trackViewUrl || appleMusicSearchUrl(song)}" target="_blank" rel="noopener" style="color:var(--accent);">Apple Musicで開く</a>`;
-      if (button) {
-        button.textContent = "再生中";
+      audio.load();
+
+      now.innerHTML = `準備完了：${escapeHtml(item.trackName)} / ${escapeHtml(item.artistName)}　<a href="${item.trackViewUrl || appleMusicSearchUrl(song)}" target="_blank" rel="noopener" style="color:var(--accent);">Apple Musicで開く</a>`;
+
+      try {
+        // PCや一部ブラウザではここで鳴る。iPhone Safariでは止まる場合がある。
+        await audio.play();
+        now.innerHTML = `再生中：${escapeHtml(item.trackName)} / ${escapeHtml(item.artistName)}　<a href="${item.trackViewUrl || appleMusicSearchUrl(song)}" target="_blank" rel="noopener" style="color:var(--accent);">Apple Musicで開く</a>`;
+        if (button) button.textContent = "再生中";
+      } catch(playErr) {
+        // iPhone向け：ユーザー操作でもう一度押せるボタンを出す
+        manual.style.display = "inline-block";
+        manual.textContent = "この曲を再生";
+        now.innerHTML = `iPhoneで音が鳴らない場合は、下の「この曲を再生」または上のプレイヤーの再生ボタンを押してください。<br>準備済み：${escapeHtml(item.trackName)} / ${escapeHtml(item.artistName)}`;
+        if (button) button.textContent = "再生";
       }
     } else {
       now.innerHTML = `試聴音源が見つかりませんでした。<a href="${appleMusicSearchUrl(song)}" target="_blank" rel="noopener" style="color:var(--accent);">Apple Musicで検索</a>`;
-      if (button) {
-        button.textContent = "検索";
-      }
+      if (button) button.textContent = "検索";
     }
   } catch (err) {
     now.innerHTML = `試聴検索でエラーが出ました。<a href="${appleMusicSearchUrl(song)}" target="_blank" rel="noopener" style="color:var(--accent);">Apple Musicで検索</a>`;
-    if (button) {
-      button.textContent = "検索";
-    }
-  } finally {
-    if (button && button.textContent === "検索中") button.textContent = "試聴";
+    if (button) button.textContent = "検索";
   }
 }
+
+
 
 function rarity(song){
   const rare=["human","映画","アンタレスと針","茶柱","エウリュノメー","SORATO","SAKANATRIBE","Paradise of Sunny","スプーンと汗"];

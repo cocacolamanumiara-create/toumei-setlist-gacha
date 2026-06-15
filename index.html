@@ -198,15 +198,15 @@
 <div class="wrap">
   <section class="hero">
     <h1>透明ツアー<br>セトリガチャ</h1>
-    <p class="sub">これまで整理した曲から、<b>本編20曲＋アンコール3曲</b>をランダム生成。かぶり防止＋少しだけライブっぽい曲順補正あり。</p>
+    <p class="sub"><b>あなただけのライブセトリ</b>を作成します。<br>本編20曲＋アンコール3曲をランダム生成。Remix・Rearrangeのかぶり防止にも対応。</p>
     <div class="namebox">
       <input id="userName" type="text" maxlength="20" placeholder="名前（任意）">
     </div>
     <div class="controls">
       <button onclick="generateSetlist()">開演する</button>
-      <button class="secondary" onclick="copySetlist()">コピー</button>
-      <button class="secondary" onclick="shareToX()">Xで共有</button>
+      <button class="secondary" onclick="shareImage()">画像を共有</button>
       <button class="secondary" onclick="saveImage()">画像保存</button>
+      <button class="secondary" onclick="copySetlist()">コピー</button>
       <button class="secondary" onclick="toggleSongList()">曲リスト編集</button>
       <span class="count" id="count"></span>
     </div>
@@ -230,7 +230,7 @@
     <textarea id="songInput"></textarea>
   </section>
 </div>
-<canvas id="shareCanvas" width="1200" height="1600" style="display:none;"></canvas>
+<canvas id="shareCanvas" width="1080" height="1920" style="display:none;"></canvas>
 
 <script>
 const defaultSongs = ["三日月サンセット", "インナーワールド", "あめふら", "GO TO THE FUTURE", "フクロウ", "開花", "白波トップウォーター", "夜の東側", "ワード", "サンプル", "ナイトフィッシングイズグッド", "雨は気まぐれ", "マレーシア32", "うねり", "ティーンエイジ", "哀愁トレイン", "新しい世界", "アムスフィッシュ", "Ame(B)", "ライトダンス", "セントレイ", "ネイティブダンサー", "minnanouta", "雑踏", "黄色い車", "enough", "涙ディライト", "アドベンチャー", "human", "intro＝汽空域", "潮", "YES NO", "アルクアラウンド", "Klee", "21.1", "アンダー", "シーラカンスと僕", "明日から", "表参道26時", "壁", "目が明く藍色", "Paradise of Sunny", "RL", "アイデンティティ", "モノクロトウキョー", "ルーキー", "アンタレスと針", "仮面の街", "流線", "エンドレス", "DocumentaRy", "『バッハの旋律を夜に聴いたせいです。』", "years", "ドキュメント", "intro", "INORI", "ミュージック", "夜の踊り子", "なんてったって春", "アルデバラン", "M", "Aoi", "ボイル", "映画", "僕と花", "mellow", "ストラクチャー", "朝の歌", "ホーリーダンス", "Ame(A)", "multiple exposure", "スローモーション", "もどかしい日々", "スプーンと汗", "ネプトゥーヌス", "montage", "忘れられないの", "マッチとピーナッツ", "陽炎", "多分、風。", "新宝島", "モス", "聴きたかったダンスミュージック、リキッドルームに", "セプテンバー -東京 version-", "グッドバイ", "蓮の花", "ユリイカ", "ナイロンの糸", "茶柱", "ワンダーランド", "さよならはエモーション", "834.194", "セプテンバー -札幌 version-", "塔", "キャラバン", "月の椀", "プラトー", "ショック！", "エウリュノメー", "シャンディガフ", "フレンドリー", "DocumentaRy of ADAPT", "moon", "怪獣", "マレーシア32 ～ 21.1 ～ Paradise of Sunny", "SAKANATRIBE", "SORATO", "僕と花 -SAKANAQUARIUM 2013 VERSION-", "ネイティブダンサー -SAKANAQUARIUM 2013 VERSION-", "バッハの旋律を夜に聴いたせいです。 -SAKANAQUARIUM 2013 VERSION-", "Ame(B) -SAKANATRIBE MIX-", "N.F.I.G REMIX", "SAKANATRIBE TRANCEMIX WITH GOCOO+GoRo", "グッドバイ (NEXT WORLD REMIX)", "ネイティブダンサー Remix 2024", "バッハの旋律を夜に聴いたせいです。 Remix 2024", "GO TO THE FUTURE (2006 ver.)", "ナイトフィッシングイズグッド (Iw_Remix)", "ミュージック (Ej_Remix)", "アイデンティティ (Ks_Remix)", "ルーキー (Takkyu Ishino Remix)", "三日月サンセット (FPM EVERLUST MIX)", "ライトダンス YSST Remix 2015", "映画 (AOKI takamasa Remix)", "サンプル (cosmic version)", "さよならはエモーション (Qrion Remix)", "YES NO (AOKI takamasa Remix)", "夜の踊り子 (agraph Remix)", "ミュージック (Cornelius Remix)", "ネイティブダンサー (rei harakami re-arrange)"];
@@ -462,24 +462,23 @@ function makeShareText(){
   return `${title}\n\n${mainText}\n\nEncore\n${encText}\n\n#サカナクション\n#透明ツアー\n#透明ツアーセトリガチャ`;
 }
 
-function shareToX(){
-  const text = makeShareText();
-  if (!text) {
-    alert("先にセトリを生成してね。");
-    return;
-  }
-  const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
-  window.open(url, "_blank");
+function makeShortPostText(){
+  const {main} = currentSetlist();
+  if (!main.length) return "";
+  const titleName = getDisplayName() ? `${getDisplayName()}透明ツアー予想セトリ` : "透明ツアー予想セトリ";
+  return `${titleName}を作成しました🎣\nあなただけのライブセトリを作ってみよう。\n\n#サカナクション\n#透明ツアー\n#透明ツアーセトリガチャ`;
 }
 
-async function saveImage(){
+function drawShareImage(){
   const {main, enc} = currentSetlist();
   if (!main.length) {
     alert("先にセトリを生成してね。");
-    return;
+    return null;
   }
 
   const canvas = document.getElementById("shareCanvas");
+  canvas.width = 1080;
+  canvas.height = 1920;
   const ctx = canvas.getContext("2d");
   const w = canvas.width, h = canvas.height;
 
@@ -490,67 +489,122 @@ async function saveImage(){
   ctx.fillStyle = grad;
   ctx.fillRect(0,0,w,h);
 
-  // soft lights
   ctx.fillStyle = "rgba(137,232,255,.18)";
-  ctx.beginPath(); ctx.arc(190,130,210,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(170,130,210,0,Math.PI*2); ctx.fill();
   ctx.fillStyle = "rgba(246,240,166,.12)";
-  ctx.beginPath(); ctx.arc(980,220,190,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(890,220,185,0,Math.PI*2); ctx.fill();
 
   ctx.strokeStyle = "rgba(255,255,255,.22)";
   ctx.lineWidth = 3;
-  roundRect(ctx,70,70,w-140,h-140,34);
+  roundRect(ctx,56,56,w-112,h-112,34);
   ctx.stroke();
 
   ctx.fillStyle = "#f5fbff";
-  ctx.font = "900 58px sans-serif";
-  ctx.fillText("透明ツアー 予想セトリ", 110, 155);
+  ctx.font = "900 52px sans-serif";
+  ctx.fillText("透明ツアー 予想セトリ", 92, 140);
 
   ctx.fillStyle = "#b8d6e8";
-  ctx.font = "500 30px sans-serif";
+  ctx.font = "500 27px sans-serif";
   const name = getDisplayName();
-  ctx.fillText(name ? `${name}SETLIST` : "SETLIST GACHA", 112, 205);
+  ctx.fillText(name ? `${name}SETLIST` : "SETLIST GACHA", 94, 188);
 
   ctx.fillStyle = "#f6f0a6";
-  ctx.font = "800 30px sans-serif";
-  ctx.fillText("Main set", 112, 270);
+  ctx.font = "800 28px sans-serif";
+  ctx.fillText("Main set", 94, 250);
 
-  ctx.fillStyle = "#f5fbff";
-  ctx.font = "500 31px sans-serif";
-  let y = 325;
+  let y = 302;
+  const numX = 98;
+  const songX = 160;
+  const maxWidth = 820;
+  const rowGap = 47;
+
   main.forEach((song,i)=>{
     ctx.fillStyle = "#89e8ff";
-    ctx.font = "800 27px sans-serif";
-    ctx.fillText(String(i+1).padStart(2,"0"), 116, y);
-    ctx.fillStyle = "#f5fbff";
-    ctx.font = "500 30px sans-serif";
-    drawText(ctx, song, 178, y, 870, 32);
-    y += 52;
+    ctx.font = "800 25px sans-serif";
+    ctx.fillText(String(i+1).padStart(2,"0"), numX, y);
+    fitText(ctx, song, songX, y, maxWidth, 29, 20);
+    y += rowGap;
   });
 
-  y += 18;
+  y += 34;
   ctx.fillStyle = "#f6f0a6";
-  ctx.font = "800 30px sans-serif";
-  ctx.fillText("Encore", 112, y);
-  y += 55;
+  ctx.font = "800 28px sans-serif";
+  ctx.fillText("Encore", 94, y);
+  y += 50;
 
   enc.forEach((song,i)=>{
     ctx.fillStyle = "#89e8ff";
-    ctx.font = "800 27px sans-serif";
-    ctx.fillText(`EN${i+1}`, 112, y);
-    ctx.fillStyle = "#f5fbff";
-    ctx.font = "500 30px sans-serif";
-    drawText(ctx, song, 178, y, 870, 32);
-    y += 52;
+    ctx.font = "800 25px sans-serif";
+    ctx.fillText(`EN${i+1}`, numX, y);
+    fitText(ctx, song, songX, y, maxWidth, 29, 20);
+    y += rowGap;
   });
 
   ctx.fillStyle = "#b8d6e8";
-  ctx.font = "500 25px sans-serif";
-  ctx.fillText("#サカナクション #透明ツアー #透明ツアーセトリガチャ", 110, h-110);
+  ctx.font = "500 23px sans-serif";
+  ctx.fillText("#サカナクション #透明ツアー #透明ツアーセトリガチャ", 92, h-112);
+
+  return canvas;
+}
+
+async function canvasToPngBlob(canvas){
+  return new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+}
+
+async function saveImage(){
+  const canvas = drawShareImage();
+  if (!canvas) return;
 
   const link = document.createElement("a");
   link.download = "toumei-setlist-gacha.png";
   link.href = canvas.toDataURL("image/png");
   link.click();
+}
+
+async function shareImage(){
+  const canvas = drawShareImage();
+  if (!canvas) return;
+
+  const blob = await canvasToPngBlob(canvas);
+  const file = new File([blob], "toumei-setlist-gacha.png", { type: "image/png" });
+  const shareData = {
+    files: [file],
+    text: makeShortPostText(),
+    title: "透明ツアー セトリガチャ"
+  };
+
+  if (navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
+    try {
+      await navigator.share(shareData);
+    } catch (e) {
+      // キャンセル時は何もしない
+    }
+  } else {
+    alert("このブラウザでは画像共有に対応していないため、画像保存を使ってね。");
+    await saveImage();
+  }
+}
+
+function fitText(ctx, text, x, y, maxWidth, maxSize, minSize){
+  let size = maxSize;
+  while (size > minSize) {
+    ctx.font = `500 ${size}px sans-serif`;
+    if (ctx.measureText(text).width <= maxWidth) break;
+    size -= 1;
+  }
+
+  if (ctx.measureText(text).width <= maxWidth) {
+    ctx.fillStyle = "#f5fbff";
+    ctx.fillText(text, x, y);
+    return;
+  }
+
+  let trimmed = text;
+  while (trimmed.length > 0 && ctx.measureText(trimmed + "…").width > maxWidth) {
+    trimmed = trimmed.slice(0, -1);
+  }
+  ctx.fillStyle = "#f5fbff";
+  ctx.fillText(trimmed + "…", x, y);
 }
 
 function roundRect(ctx,x,y,w,h,r){

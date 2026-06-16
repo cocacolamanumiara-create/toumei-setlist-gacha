@@ -192,6 +192,31 @@
     color:#06202b;
     background:linear-gradient(135deg,var(--accent),#fff);
   }
+  .preview-li{
+    display:block;
+    grid-template-columns:none;
+    padding:12px;
+    border-style:solid;
+    background:rgba(0,0,0,.22);
+  }
+  .inline-preview-title{
+    margin:0 0 9px;
+    color:var(--muted);
+    font-size:12px;
+    line-height:1.5;
+  }
+  .inline-preview-title a{
+    color:var(--accent);
+  }
+  .inline-preview-frame{
+    width:100%;
+    max-width:660px;
+    height:175px;
+    border:0;
+    border-radius:16px;
+    overflow:hidden;
+    background:transparent;
+  }
   .encore li {
     background:rgba(246,240,166,.11);
   }
@@ -271,13 +296,7 @@
 
   <section class="panel" id="previewPanel" style="display:none;margin-top:18px;">
     <h2>試聴</h2>
-    <p class="small">曲名横の「試聴」を押すと、Apple Musicの埋め込みプレイヤーを表示します。主要曲は登録済み、未登録曲も自動検索して見つかればブラウザ内で試聴できます。見つからない曲は「検索」からApple Musicへ移動してください。</p>
-    <div id="embedPlayerWrap" style="display:none;margin-top:10px;">
-      <iframe id="appleEmbedPlayer" allow="autoplay *; encrypted-media *; fullscreen *; clipboard-write" frameborder="0" height="175" style="width:100%;max-width:660px;overflow:hidden;border-radius:18px;background:transparent;"></iframe>
-    </div>
-    <audio id="audioPlayer" controls playsinline preload="auto" style="width:100%;margin-top:8px;display:none;"></audio>
-    <div id="nowPlaying" class="small" style="margin-top:8px;"></div>
-    <button id="manualPlayButton" class="secondary" onclick="manualPlayPreview()" style="display:none;margin-top:10px;">この曲を再生</button>
+    <p class="small">曲名横の「試聴」を押すと、その曲の下にApple Musicの埋め込みプレイヤーを表示します。見つからない曲は「検索」からApple Musicへ移動してください。</p>
   </section>
 
   <section class="panel" id="editor" style="display:none;margin-top:18px;">
@@ -657,39 +676,63 @@ function songActionHtml(song){
 
 const embedUrlCache = new Map();
 
+async function searchAppleMusicTrack(searchText, baseTitle){
+  const data = await itunesSearchJsonp(searchText);
+  const results = (data.results || []).filter(item => {
+    const artist = (item.artistName || "").toLowerCase();
+    return artist.includes("sakanaction") || item.artistName === "サカナクション" || artist.includes("サカナクション");
+  });
+
+  const lowered = baseTitle.toLowerCase();
+  const exact = results.find(r => (r.trackName || "").toLowerCase() === lowered);
+  const includes = results.find(r => (r.trackName || "").toLowerCase().includes(lowered));
+  return exact || includes || results[0] || null;
+}
+
 async function findAppleMusicTrackUrl(song){
   const baseTitle = stripVersionForSearch(song);
-  const mapped = getMappedAppleMusicUrl(song);
-  if (mapped && !mapped.includes("/search?")) return mapped;
-
   if (embedUrlCache.has(baseTitle)) return embedUrlCache.get(baseTitle);
 
-  try {
-    const data = await itunesSearchJsonp(baseTitle);
-    const results = (data.results || []).filter(item => {
-      const artist = (item.artistName || "").toLowerCase();
-      return artist.includes("sakanaction") || item.artistName === "サカナクション";
-    });
-    const lowered = baseTitle.toLowerCase();
-    const item = results.find(r => (r.trackName || "").toLowerCase().includes(lowered)) || results[0] || null;
-    const trackUrl = item && item.trackViewUrl ? item.trackViewUrl : null;
-    embedUrlCache.set(baseTitle, trackUrl);
-    return trackUrl;
-  } catch(e) {
-    embedUrlCache.set(baseTitle, null);
-    return null;
+  const terms = [
+    `${baseTitle} サカナクション`,
+    `${baseTitle} sakanaction`,
+    baseTitle
+  ];
+
+  for (const term of terms) {
+    try {
+      const item = await searchAppleMusicTrack(term, baseTitle);
+      if (item && item.trackViewUrl) {
+        embedUrlCache.set(baseTitle, item.trackViewUrl);
+        return item.trackViewUrl;
+      }
+    } catch(e) {
+      // 次の検索語で再試行
+    }
   }
+
+  const mapped = getMappedAppleMusicUrl(song);
+  const fallback = mapped && !mapped.includes("/search?") ? mapped : null;
+  embedUrlCache.set(baseTitle, fallback);
+  return fallback;
+}
+
+function clearInlinePreview(){
+  document.querySelectorAll(".preview-li").forEach(el => el.remove());
+}
+
+function insertInlinePreviewAfter(button, htmlContent){
+  clearInlinePreview();
+  const li = button ? button.closest("li") : null;
+  if (!li) return;
+  const previewLi = document.createElement("li");
+  previewLi.className = "preview-li";
+  previewLi.innerHTML = htmlContent;
+  li.insertAdjacentElement("afterend", previewLi);
 }
 
 async function openEmbedPreview(event, song){
   if (event) event.stopPropagation();
-
-  const panel = document.getElementById("previewPanel");
-  const embedWrap = document.getElementById("embedPlayerWrap");
-  const iframe = document.getElementById("appleEmbedPlayer");
-  const audio = document.getElementById("audioPlayer");
-  const now = document.getElementById("nowPlaying");
-  const manual = document.getElementById("manualPlayButton");
 
   document.querySelectorAll(".mini-btn.playing").forEach(b => {
     b.classList.remove("playing");
@@ -700,40 +743,40 @@ async function openEmbedPreview(event, song){
   if (clickedButton) {
     clickedButton.classList.add("playing");
     clickedButton.textContent = "準備中";
+    insertInlinePreviewAfter(clickedButton, `<p class="inline-preview-title">「${escapeHtml(stripVersionForSearch(song))}」の試聴を準備中...</p>`);
   }
-
-  panel.style.display = "block";
-  manual.style.display = "none";
-  audio.pause();
-  audio.style.display = "none";
-  embedWrap.style.display = "none";
-  iframe.removeAttribute("src");
-  now.textContent = `「${stripVersionForSearch(song)}」の試聴を準備中...`;
 
   const trackUrl = await findAppleMusicTrackUrl(song);
 
   if (trackUrl) {
-    iframe.src = embedUrlFromAppleMusicUrl(trackUrl);
-    embedWrap.style.display = "block";
-    now.innerHTML = `試聴プレイヤーを表示中：${escapeHtml(stripVersionForSearch(song))}　<a href="${trackUrl}" target="_blank" rel="noopener" style="color:var(--accent);">Apple Musicで開く</a>`;
-    if (clickedButton) clickedButton.textContent = "表示中";
-  } else {
-    now.innerHTML = `この曲はブラウザ内試聴を取得できませんでした。<a href="${appleMusicSearchUrl(song)}" target="_blank" rel="noopener" style="color:var(--accent);">Apple Musicで検索</a>`;
-    if (clickedButton) {
-      clickedButton.classList.remove("playing");
-      clickedButton.textContent = "試聴";
+    const embedUrl = embedUrlFromAppleMusicUrl(trackUrl);
+    if (embedUrl && clickedButton) {
+      insertInlinePreviewAfter(clickedButton, `
+        <p class="inline-preview-title">試聴プレイヤー：${escapeHtml(stripVersionForSearch(song))}　<a href="${trackUrl}" target="_blank" rel="noopener">Apple Musicで開く</a></p>
+        <iframe class="inline-preview-frame" allow="autoplay *; encrypted-media *; fullscreen *; clipboard-write" frameborder="0" src="${embedUrl}"></iframe>
+      `);
+      clickedButton.textContent = "表示中";
+      return;
     }
+  }
+
+  if (clickedButton) {
+    insertInlinePreviewAfter(clickedButton, `
+      <p class="inline-preview-title">この曲はブラウザ内試聴を取得できませんでした。<a href="${appleMusicSearchUrl(song)}" target="_blank" rel="noopener">Apple Musicで検索</a></p>
+    `);
+    clickedButton.classList.remove("playing");
+    clickedButton.textContent = "試聴";
   }
 }
 
-function itunesSearchJsonp(searchTitle){
+function itunesSearchJsonp(searchText){
   return new Promise((resolve, reject) => {
     const callbackName = "itunesCallback_" + Date.now() + "_" + Math.floor(Math.random() * 100000);
     const script = document.createElement("script");
     const timeout = setTimeout(() => {
       cleanup();
       reject(new Error("timeout"));
-    }, 8000);
+    }, 9000);
 
     function cleanup(){
       clearTimeout(timeout);
@@ -751,26 +794,9 @@ function itunesSearchJsonp(searchTitle){
       reject(new Error("jsonp error"));
     };
 
-    script.src = `https://itunes.apple.com/search?term=${encodeURIComponent(searchTitle + " サカナクション")}&country=JP&media=music&entity=song&limit=10&callback=${callbackName}`;
+    script.src = `https://itunes.apple.com/search?term=${encodeURIComponent(searchText)}&country=JP&media=music&entity=song&limit=15&callback=${callbackName}`;
     document.body.appendChild(script);
   });
-}
-
-async function findPreviewItem(song){
-  const searchTitle = stripVersionForSearch(song);
-  const cacheKey = searchTitle;
-  if (previewCache.has(cacheKey)) return previewCache.get(cacheKey);
-
-  const data = await itunesSearchJsonp(searchTitle);
-  const results = (data.results || []).filter(item => {
-    const artist = (item.artistName || "").toLowerCase();
-    return artist.includes("sakanaction") || item.artistName === "サカナクション";
-  });
-
-  const lowered = searchTitle.toLowerCase();
-  const item = results.find(r => (r.trackName || "").toLowerCase().includes(lowered)) || results[0] || null;
-  previewCache.set(cacheKey, item);
-  return item;
 }
 
 async function preloadPreviewUrls(list){
